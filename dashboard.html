@@ -1,54 +1,75 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Dashboard - Cost Analysis</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Cost Analysis Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+    th { background: #f5f5f5; }
+  </style>
 </head>
-<body class="bg-light">
-<div class="container my-5">
-  <h1 class="mb-4 text-center">Dashboard: Cost Analysis</h1>
-  <canvas id="costChart" class="mb-4"></canvas>
-  <canvas id="laborChart"></canvas>
-</div>
-<a href="index.html" class="btn btn-secondary mt-3">← Back to Form</a>
+<body>
+  <h1>Cost Analysis Responses</h1>
+  <div id="status">Loading...</div>
+  <table id="responsesTable" style="display:none;">
+    <thead>
+      <tr>
+        <th>Unit Name</th>
+        <th>Owner Name</th>
+        <th>Contact</th>
+        <th>Submitted At</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
 
-<script>
-async function fetchData() {
-  const res = await fetch("/.netlify/functions/getData");
-  return res.json();
-}
+  <script>
+    async function loadData() {
+      try {
+        const res = await fetch("/.netlify/functions/getData");
+        const data = await res.json();
 
-fetchData().then(data => {
-  const rawCosts = data.map(r => r.data.raw_material_cost);
-  const laborCosts = data.map(r => r.data.labor_cost);
+        console.log("Fetched data:", data);
 
-  new Chart(document.getElementById('costChart'), {
-    type: 'pie',
-    data: {
-      labels: ["Raw Materials", "Labor", "Overheads"],
-      datasets: [{
-        data: [
-          rawCosts.reduce((a,b)=>a+ +b,0),
-          laborCosts.reduce((a,b)=>a+ +b,0),
-          data.map(r => r.data.overhead_cost || 0).reduce((a,b)=>a+ +b,0)
-        ]
-      }]
+        if (!Array.isArray(data)) {
+          document.getElementById("status").innerText = "No records found.";
+          return;
+        }
+
+        if (data.length === 0) {
+          document.getElementById("status").innerText = "No responses yet.";
+          return;
+        }
+
+        // Hide status, show table
+        document.getElementById("status").style.display = "none";
+        document.getElementById("responsesTable").style.display = "table";
+
+        const tbody = document.getElementById("tableBody");
+        tbody.innerHTML = "";
+
+        data.forEach(row => {
+          // row.data is your JSON object inside Supabase
+          const d = row.data || {};
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${d.unit_name || "-"}</td>
+            <td>${d.owner_name || "-"}</td>
+            <td>${d.contact || "-"}</td>
+            <td>${row.created_at || "-"}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error(err);
+        document.getElementById("status").innerText = "Error loading data.";
+      }
     }
-  });
 
-  new Chart(document.getElementById('laborChart'), {
-    type: 'bar',
-    data: {
-      labels: data.map(r => r.data.unit_name),
-      datasets: [{
-        label: "Workers",
-        data: data.map(r => r.data.workers)
-      }]
-    }
-  });
-});
-</script>
+    loadData();
+  </script>
 </body>
 </html>
