@@ -4,71 +4,249 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Cost Analysis Dashboard</title>
+  <!-- Load Chart.js for beautiful graphs -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Load Bootstrap for styling -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
-    th { background: #f5f5f5; }
+    .card { margin-bottom: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+    .chart-container { position: relative; height: 300px; width: 100%; }
   </style>
 </head>
-<body>
-  <h1>Cost Analysis Responses</h1>
-  <div id="status">Loading...</div>
-  <table id="responsesTable" style="display:none;">
-    <thead>
-      <tr>
-        <th>Unit Name</th>
-        <th>Owner Name</th>
-        <th>Contact</th>
-        <th>Submitted At</th>
-      </tr>
-    </thead>
-    <tbody id="tableBody"></tbody>
-  </table>
+<body class="bg-light">
+  <div class="container-fluid py-4">
+    <h1 class="text-center mb-4">📊 Cost Analysis Dashboard</h1>
+    <p class="text-center text-muted">Insights from submitted cost sheets</p>
+
+    <div id="status" class="alert alert-info">Loading data...</div>
+
+    <!-- Summary Stats Cards -->
+    <div class="row" id="summaryCards" style="display: none;">
+      <div class="col-md-3">
+        <div class="card text-white bg-primary">
+          <div class="card-body">
+            <h5 class="card-title">Total Submissions</h5>
+            <h2 id="totalSubmissions" class="card-text">0</h2>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-white bg-success">
+          <div class="card-body">
+            <h5 class="card-title">Avg. Production Cost</h5>
+            <h2 id="avgCostPerUnit">₹0.00</h2>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-white bg-info">
+          <div class="card-body">
+            <h5 class="card-title">Avg. Selling Price</h5>
+            <h2 id="avgSellingPrice">₹0.00</h2>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-white bg-warning">
+          <div class="card-body">
+            <h5 class="card-title">Avg. Profit Margin</h5>
+            <h2 id="avgProfitMargin">0%</h2>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mt-4">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5>Business Type Distribution</h5>
+          </div>
+          <div class="card-body">
+            <div class="chart-container">
+              <canvas id="businessTypeChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5>Cost Breakdown (Average)</h5>
+          </div>
+          <div class="card-body">
+            <div class="chart-container">
+              <canvas id="costBreakdownChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Raw Data Table (Optional) -->
+    <div class="card mt-4">
+      <div class="card-header">
+        <h5>All Submissions</h5>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-striped table-hover">
+            <thead>
+              <tr>
+                <th>Unit Name</th>
+                <th>Business Type</th>
+                <th>Total Cost</th>
+                <th>Production (Units)</th>
+                <th>Cost/Unit</th>
+                <th>Selling Price</th>
+                <th>Profit Margin</th>
+              </tr>
+            </thead>
+            <tbody id="dataTableBody">
+              <!-- Data will be inserted here by JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script>
     async function loadData() {
       try {
-        const res = await fetch("/.netlify/functions/getData");
-        const data = await res.json();
+        const res = await fetch('/.netlify/functions/getData');
+        const submissions = await res.json();
 
-        console.log("Fetched data:", data);
-
-        if (!Array.isArray(data)) {
-          document.getElementById("status").innerText = "No records found.";
+        if (!Array.isArray(submissions) || submissions.length === 0) {
+          document.getElementById('status').innerText = 'No data available yet.';
           return;
         }
 
-        if (data.length === 0) {
-          document.getElementById("status").innerText = "No responses yet.";
-          return;
-        }
+        // Hide loading status, show the summary cards
+        document.getElementById('status').style.display = 'none';
+        document.getElementById('summaryCards').style.display = 'flex';
 
-        // Hide status, show table
-        document.getElementById("status").style.display = "none";
-        document.getElementById("responsesTable").style.display = "table";
+        // Process the data for insights
+        processData(submissions);
 
-        const tbody = document.getElementById("tableBody");
-        tbody.innerHTML = "";
-
-        data.forEach(row => {
-          // row.data is your JSON object inside Supabase
-          const d = row.data || {};
-          const tr = document.createElement("tr");
-          tr.innerHTML = `
-            <td>${d.unit_name || "-"}</td>
-            <td>${d.owner_name || "-"}</td>
-            <td>${d.contact || "-"}</td>
-            <td>${row.created_at || "-"}</td>
-          `;
-          tbody.appendChild(tr);
-        });
       } catch (err) {
-        console.error(err);
-        document.getElementById("status").innerText = "Error loading data.";
+        console.error('Failed to load data:', err);
+        document.getElementById('status').innerText = 'Error loading data. Check the console.';
+        document.getElementById('status').className = 'alert alert-danger';
       }
     }
 
+    function processData(submissions) {
+      let totalSubmissions = submissions.length;
+      let totalCost = 0;
+      totalProductionUnits = 0;
+      totalSellingPrice = 0;
+      businessTypeCount = { 'Gift Shop': 0, 'Bakery': 0, 'Both': 0 };
+      costBreakdown = { materials: 0, labor: 0, overhead: 0 };
+
+      // First, calculate totals and counts
+      submissions.forEach(sub => {
+        const d = sub.data;
+        let materialCost = parseFloat(d.raw_material_cost) || 0;
+        let laborCost = parseFloat(d.labor_cost) || 0;
+        let overheadCost = parseFloat(d.overhead_cost) || 0;
+        let productionUnits = parseFloat(d.production_units) || 1; // Avoid division by zero
+        let sellingPrice = parseFloat(d.selling_price) || 0;
+
+        let totalMonthlyCost = materialCost + laborCost + overheadCost;
+        let costPerUnit = totalMonthlyCost / productionUnits;
+        let profitPerUnit = sellingPrice - costPerUnit;
+        let profitMargin = sellingPrice > 0 ? (profitPerUnit / sellingPrice) * 100 : 0;
+
+        // Add to aggregates
+        totalCost += totalMonthlyCost;
+        totalProductionUnits += productionUnits;
+        totalSellingPrice += sellingPrice;
+        businessTypeCount[d.business_type] = (businessTypeCount[d.business_type] || 0) + 1;
+        costBreakdown.materials += materialCost;
+        costBreakdown.labor += laborCost;
+        costBreakdown.overhead += overheadCost;
+
+        // Add a row to the table for this submission
+        let row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${d.unit_name || 'N/A'}</td>
+          <td>${d.business_type || 'N/A'}</td>
+          <td>₹${totalMonthlyCost.toLocaleString('en-IN')}</td>
+          <td>${productionUnits.toLocaleString('en-IN')}</td>
+          <td>₹${costPerUnit.toFixed(2)}</td>
+          <td>₹${sellingPrice.toLocaleString('en-IN')}</td>
+          <td class="${profitMargin >= 0 ? 'text-success' : 'text-danger'}">${profitMargin.toFixed(1)}%</td>
+        `;
+        document.getElementById('dataTableBody').appendChild(row);
+      });
+
+      // Now calculate averages
+      let avgCostPerUnit = totalCost / totalProductionUnits;
+      let avgSellingPrice = totalSellingPrice / totalSubmissions;
+      let avgProfitPerUnit = avgSellingPrice - avgCostPerUnit;
+      let avgProfitMargin = avgSellingPrice > 0 ? (avgProfitPerUnit / avgSellingPrice) * 100 : 0;
+
+      // Update Summary Cards
+      document.getElementById('totalSubmissions').textContent = totalSubmissions;
+      document.getElementById('avgCostPerUnit').textContent = `₹${avgCostPerUnit.toFixed(2)}`;
+      document.getElementById('avgSellingPrice').textContent = `₹${avgSellingPrice.toFixed(2)}`;
+      document.getElementById('avgProfitMargin').textContent = `${avgProfitMargin.toFixed(1)}%`;
+
+      // Create Charts
+      createBusinessTypeChart(businessTypeCount);
+      createCostBreakdownChart(costBreakdown, totalSubmissions);
+    }
+
+    function createBusinessTypeChart(data) {
+      const ctx = document.getElementById('businessTypeChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: Object.keys(data),
+          datasets: [{
+            data: Object.values(data),
+            backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false
+        }
+      });
+    }
+
+    function createCostBreakdownChart(data, count) {
+      // Calculate averages for the breakdown
+      let avgMaterials = data.materials / count;
+      let avgLabor = data.labor / count;
+      let avgOverhead = data.overhead / count;
+
+      const ctx = document.getElementById('costBreakdownChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['Raw Materials', 'Labor', 'Overhead'],
+          datasets: [{
+            label: 'Average Monthly Cost (₹)',
+            data: [avgMaterials, avgLabor, avgOverhead],
+            backgroundColor: ['#4BC0C0', '#FF9F40', '#9966FF']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    }
+
+    // Load the data when the page opens
     loadData();
   </script>
 </body>
